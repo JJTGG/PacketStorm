@@ -1,0 +1,8 @@
+{
+  "name": "PacketStorm",
+  "description": "60fps interactive system architecture and live traffic simulator for visualizing distributed bottlenecks, backpressure, caching, rate-limiting, and cascading failures.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
