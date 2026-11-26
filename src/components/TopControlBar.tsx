@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Activity,
   AlertTriangle,
+  Check,
   CheckCircle2,
+  Copy,
   Pause,
   Play,
   RotateCcw,
+  Share2,
+  X,
   XOctagon,
 } from 'lucide-react';
 import { PRESETS } from '../lib/sim/presets';
@@ -22,6 +26,11 @@ interface TopControlBarProps {
   onChangeIntensity: (rps: number) => void;
   onTogglePlay: () => void;
   onReset: () => void;
+  shareUrl: string | null;
+  shareCopied: boolean;
+  onShareTopology: () => void;
+  onCopyShareUrl: () => void;
+  onCloseSharePopover: () => void;
 }
 
 const PATTERN_OPTIONS: Array<{ id: TrafficPattern; label: string }> = [
@@ -41,7 +50,13 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
   onChangeIntensity,
   onTogglePlay,
   onReset,
+  shareUrl,
+  shareCopied,
+  onShareTopology,
+  onCopyShareUrl,
+  onCloseSharePopover,
 }) => {
+  const shareInputRef = useRef<HTMLInputElement>(null);
   const successPct = metrics.successRate;
   const isCritical = successPct < 80 || metrics.droppedRps > 15;
   const isDegraded = !isCritical && (successPct < 98 || metrics.p95LatencyMs > 250);
@@ -130,8 +145,8 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
           </div>
         </div>
 
-        {/* Playback Controls */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Playback & Share Controls */}
+        <div className="relative flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onTogglePlay}
@@ -161,6 +176,78 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset</span>
           </button>
+          <button
+            type="button"
+            onClick={onShareTopology}
+            title="Generate compressed URL for the current topology"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              shareCopied
+                ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/50'
+                : 'text-cyan-300 hover:text-cyan-100 bg-cyan-500/10 hover:bg-cyan-500/20 border-cyan-500/35'
+            }`}
+          >
+            {shareCopied ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Copied Link</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Share</span>
+              </>
+            )}
+          </button>
+
+          {shareUrl && (
+            <div className="absolute right-0 top-full mt-2 z-50 w-[360px] bg-[#0d1320] border border-slate-700/90 rounded-lg p-3 shadow-2xl space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-100">Share Topology Link</span>
+                <span className="font-mono text-[11px] text-slate-400">
+                  {shareUrl.length} chars
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={shareInputRef}
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Shareable topology URL"
+                  className="flex-1 min-w-0 bg-[#090d16] border border-slate-800 rounded px-2.5 py-1.5 font-mono text-[11px] text-cyan-300 outline-none select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    shareInputRef.current?.select();
+                    onCopyShareUrl();
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-100 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  {shareCopied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCloseSharePopover}
+                  aria-label="Close share popover"
+                  className="p-1.5 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

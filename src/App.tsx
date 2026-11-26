@@ -7,6 +7,12 @@ import { TopControlBar } from './components/TopControlBar';
 import { SimulationEngine } from './lib/sim/engine';
 import { PRESETS } from './lib/sim/presets';
 import {
+  buildShareUrl,
+  decodeTopologyFromToken,
+  encodeTopologyToToken,
+  extractShareTokenFromLocation,
+} from './lib/sim/share';
+import {
   NodeUiSnapshot,
   SerializedTopology,
   SimMetrics,
@@ -26,16 +32,19 @@ export default function App() {
   const engineRef = useRef<SimulationEngine | null>(null);
   if (!engineRef.current) {
     const created = new SimulationEngine();
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as StoredState;
-        if (parsed?.topology && created.importTopology(parsed.topology)) {
-          created.activePresetId = parsed.activePresetId || 'custom';
+    // Only restore localStorage if no shared URL token is present in location
+    if (!extractShareTokenFromLocation()) {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as StoredState;
+          if (parsed?.topology && created.importTopology(parsed.topology)) {
+            created.activePresetId = parsed.activePresetId || 'custom';
+          }
         }
+      } catch {
+        // Fall back cleanly to default Doomed Monolith preset
       }
-    } catch {
-      // Fall back cleanly to default Doomed Monolith preset
     }
     engineRef.current = created;
   }
@@ -50,6 +59,9 @@ export default function App() {
   const [oscilloscopeOpen, setOscilloscopeOpen] = useState<boolean>(true);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState<boolean>(false);
+  const copyTimerRef = useRef<number | null>(null);
 
   const [metrics, setMetrics] = useState<SimMetrics>(() => engine.getMetrics());
   const [allNodes, setAllNodes] = useState<NodeUiSnapshot[]>(() => engine.getAllNodeSnapshots());
@@ -78,6 +90,81 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [syncUiTelemetry]);
 
+  // Load shared topology from URL (#t=... or ?t=...) on mount and hashchange
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFromLocation = async () => {
+      const token = extractShareTokenFromLocation();
+      if (!token) return;
+      const decoded = await decodeTopologyFromToken(token);
+      if (cancelled) return;
+      if (decoded && engine.importTopology(decoded)) {
+        engine.isRunning = true;
+        setActivePresetId('custom');
+        setTrafficPattern(engine.trafficPattern);
+        setTrafficIntensityRps(engine.trafficIntensityRps);
+        setIsRunning(true);
+        setSelectedNodeId(null);
+        setImportError(null);
+        setPresetChangeTrigger((c) => c + 1);
+        persistTopology();
+        syncUiTelemetry();
+      } else {
+        setImportError('Shared topology link could not be decoded.');
+      }
+    };
+
+    void loadFromLocation();
+    const onHashChange = () => {
+      void loadFromLocation();
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hashchange', onHashChange);
+    };
+  }, [engine, persistTopology, syncUiTelemetry]);
+
+  const copyTextWithFeedback = useCallback((url: string) => {
+    const markCopied = () => {
+      setShareCopied(true);
+      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setShareCopied(false), 2500);
+    };
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(markCopied).catch(() => {
+        try {
+          if (document.execCommand('copy')) markCopied();
+        } catch {
+          // User still has the URL selected inside the popover input
+        }
+      });
+    } else {
+      try {
+        if (document.execCommand('copy')) markCopied();
+      } catch {
+        // User still has the URL selected inside the popover input
+      }
+    }
+  }, []);
+
+  const handleShareTopology = useCallback(async () => {
+    const topology = engine.exportTopology();
+    const token = await encodeTopologyToToken(topology);
+    const url = buildShareUrl(token);
+    window.history.replaceState(null, '', `#t=${token}`);
+    setShareUrl(url);
+    copyTextWithFeedback(url);
+  }, [engine, copyTextWithFeedback]);
+
+  const handleCopyShareUrl = useCallback(() => {
+    if (shareUrl) {
+      copyTextWithFeedback(shareUrl);
+    }
+  }, [shareUrl, copyTextWithFeedback]);
+
   const handleSelectNode = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);
     if (nodeId) {
@@ -97,6 +184,11 @@ export default function App() {
       setIsRunning(true);
       setSelectedNodeId(null);
       setImportError(null);
+      setShareUrl(null);
+      setShareCopied(false);
+      if (window.location.hash || window.location.search) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
       setPresetChangeTrigger((c) => c + 1);
       persistTopology();
       syncUiTelemetry();
@@ -242,6 +334,11 @@ export default function App() {
         onChangeIntensity={handleChangeIntensity}
         onTogglePlay={handleTogglePlay}
         onReset={handleReset}
+        shareUrl={shareUrl}
+        shareCopied={shareCopied}
+        onShareTopology={() => void handleShareTopology()}
+        onCopyShareUrl={handleCopyShareUrl}
+        onCloseSharePopover={() => setShareUrl(null)}
       />
 
       <main className="relative flex-1 min-h-0 flex overflow-hidden">

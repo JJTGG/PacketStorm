@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { SimulationEngine } from './engine';
 import { PRESETS } from './presets';
+import { decodeTopologyFromToken, encodeTopologyToToken } from './share';
 import { SerializedTopology } from './types';
 
 function stepSeconds(engine: SimulationEngine, seconds: number, dt = 0.02): void {
@@ -105,4 +106,26 @@ function stepSeconds(engine: SimulationEngine, seconds: number, dt = 0.02): void
   assert.equal(engine.importTopology(malformed), false, 'Malformed node type must be rejected');
 }
 
-console.log('All PacketStorm simulation engine assertions passed.');
+// 7. Compressed Share Topology URL round-trip
+async function runShareTests(): Promise<void> {
+  const engine = new SimulationEngine();
+  engine.loadPreset(PRESETS[2]);
+  const exported = engine.exportTopology('Fortress Share');
+  const token = await encodeTopologyToToken(exported);
+
+  assert.ok(token.startsWith('z.') || token.startsWith('u.'), 'Token should include compression prefix');
+  assert.ok(token.length < JSON.stringify(exported).length, 'Compressed token should be shorter than raw JSON');
+
+  const decoded = await decodeTopologyFromToken(token);
+  assert.ok(decoded !== null, 'Compressed token should decode cleanly');
+  assert.equal(decoded!.nodes.length, exported.nodes.length);
+  assert.equal(decoded!.edges.length, exported.edges.length);
+  assert.equal(decoded!.trafficPattern, exported.trafficPattern);
+
+  const badDecoded = await decodeTopologyFromToken('z.not-valid-compressed-data');
+  assert.equal(badDecoded, null, 'Corrupted share token must return null');
+
+  console.log('All PacketStorm simulation engine and share URL assertions passed.');
+}
+
+void runShareTests();
