@@ -9,6 +9,8 @@ import {
   Play,
   RotateCcw,
   Share2,
+  Volume2,
+  VolumeX,
   X,
   XOctagon,
 } from 'lucide-react';
@@ -26,6 +28,8 @@ interface TopControlBarProps {
   onChangeIntensity: (rps: number) => void;
   onTogglePlay: () => void;
   onReset: () => void;
+  soundEnabled: boolean;
+  onToggleSound: () => void;
   shareUrl: string | null;
   shareCopied: boolean;
   onShareTopology: () => void;
@@ -50,6 +54,8 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
   onChangeIntensity,
   onTogglePlay,
   onReset,
+  soundEnabled,
+  onToggleSound,
   shareUrl,
   shareCopied,
   onShareTopology,
@@ -175,6 +181,20 @@ export const TopControlBar: React.FC<TopControlBarProps> = ({
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset</span>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleSound}
+            aria-pressed={soundEnabled}
+            aria-label={soundEnabled ? 'Mute sound feedback' : 'Enable sound feedback'}
+            title={soundEnabled ? 'Sound feedback on (click to mute)' : 'Sound feedback muted (click to enable)'}
+            className={`flex items-center justify-center p-1.5 rounded-md border transition-colors shrink-0 cursor-pointer ${
+              soundEnabled
+                ? 'text-cyan-300 hover:text-cyan-100 bg-[#090d16] hover:bg-slate-800 border-slate-800'
+                : 'text-slate-500 hover:text-slate-300 bg-[#090d16] hover:bg-slate-800 border-slate-800'
+            }`}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
           <button
             type="button"

@@ -310,6 +310,14 @@ export class SimulationEngine {
     return this.cachedMetrics;
   }
 
+  public getOutcomeCounters(): { completed: number; cacheHits: number; dropped: number } {
+    return {
+      completed: this.completedTotal,
+      cacheHits: this.cacheHitTotal,
+      dropped: this.droppedTotal,
+    };
+  }
+
   public getTimeSeries(): TimeSeriesPoint[] {
     return this.timeSeries;
   }

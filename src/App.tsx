@@ -4,6 +4,7 @@ import { InspectorPanel } from './components/InspectorPanel';
 import { SimulatorCanvas } from './components/SimulatorCanvas';
 import { TelemetryOscilloscope } from './components/TelemetryOscilloscope';
 import { TopControlBar } from './components/TopControlBar';
+import { soundEngine } from './lib/audio/soundEngine';
 import { SimulationEngine } from './lib/sim/engine';
 import { PRESETS } from './lib/sim/presets';
 import {
@@ -22,6 +23,7 @@ import {
 } from './lib/sim/types';
 
 const STORAGE_KEY = 'packetstorm:v1:topology';
+const SOUND_STORAGE_KEY = 'packetstorm:v1:sound';
 
 interface StoredState {
   activePresetId: string;
@@ -61,6 +63,14 @@ export default function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState<boolean>(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      const saved = window.localStorage.getItem(SOUND_STORAGE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
   const copyTimerRef = useRef<number | null>(null);
 
   const [metrics, setMetrics] = useState<SimMetrics>(() => engine.getMetrics());
@@ -89,6 +99,27 @@ export default function App() {
     const timer = window.setInterval(syncUiTelemetry, 200);
     return () => window.clearInterval(timer);
   }, [syncUiTelemetry]);
+
+  useEffect(() => {
+    soundEngine.setEnabled(soundEnabled);
+    try {
+      window.localStorage.setItem(SOUND_STORAGE_KEY, String(soundEnabled));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    const unlockOnGesture = () => {
+      soundEngine.unlock();
+    };
+    window.addEventListener('pointerdown', unlockOnGesture, { passive: true });
+    window.addEventListener('keydown', unlockOnGesture, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockOnGesture);
+      window.removeEventListener('keydown', unlockOnGesture);
+    };
+  }, []);
 
   // Load shared topology from URL (#t=... or ?t=...) on mount and hashchange
   useEffect(() => {
@@ -224,6 +255,14 @@ export default function App() {
     syncUiTelemetry();
   }, [engine, syncUiTelemetry]);
 
+  const handleToggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      soundEngine.setEnabled(next);
+      return next;
+    });
+  }, []);
+
   const handleUpdateConfig = useCallback(
     (nodeId: string, patch: Partial<SimNodeConfig>) => {
       engine.updateNodeConfig(nodeId, patch);
@@ -334,6 +373,8 @@ export default function App() {
         onChangeIntensity={handleChangeIntensity}
         onTogglePlay={handleTogglePlay}
         onReset={handleReset}
+        soundEnabled={soundEnabled}
+        onToggleSound={handleToggleSound}
         shareUrl={shareUrl}
         shareCopied={shareCopied}
         onShareTopology={() => void handleShareTopology()}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { soundEngine } from '../audio/soundEngine';
 import { SimulationEngine } from './engine';
 import { PRESETS } from './presets';
 import { decodeTopologyFromToken, encodeTopologyToToken } from './share';
@@ -124,6 +125,16 @@ async function runShareTests(): Promise<void> {
 
   const badDecoded = await decodeTopologyFromToken('z.not-valid-compressed-data');
   assert.equal(badDecoded, null, 'Corrupted share token must return null');
+
+  // 8. Outcome counters & headless sound engine safety
+  const audioEngine = new SimulationEngine();
+  audioEngine.setTrafficPattern('viral_spike');
+  stepSeconds(audioEngine, 4);
+  const counters = audioEngine.getOutcomeCounters();
+  assert.ok(counters.completed > 0, 'Expected completed counter to increment');
+  assert.ok(counters.dropped > 0, 'Expected dropped counter to increment under viral spike');
+  soundEngine.unlock();
+  soundEngine.processEvents({ delivered: 3, cacheHits: 1, dropped: 2 });
 
   console.log('All PacketStorm simulation engine and share URL assertions passed.');
 }

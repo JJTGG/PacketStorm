@@ -13,6 +13,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { soundEngine } from '../lib/audio/soundEngine';
 import { SimulationEngine } from '../lib/sim/engine';
 import { NODE_DIMENSIONS, NODE_META } from '../lib/sim/presets';
 import { NodeType, PacketColor, SimEdge, SimNode } from '../lib/sim/types';
@@ -386,13 +387,39 @@ export const SimulatorCanvas: React.FC<SimulatorCanvasProps> = ({
     ro.observe(container);
 
     let lastFrameMs = performance.now();
+    let prevCounters = engine.getOutcomeCounters();
     let rafId = 0;
 
     const renderFrame = (nowMs: number) => {
       const dtSec = Math.min(0.05, (nowMs - lastFrameMs) / 1000);
       lastFrameMs = nowMs;
 
+      const wasRunning = engine.isRunning;
       engine.step(dtSec);
+
+      const currCounters = engine.getOutcomeCounters();
+      if (
+        wasRunning &&
+        currCounters.completed >= prevCounters.completed &&
+        currCounters.cacheHits >= prevCounters.cacheHits &&
+        currCounters.dropped >= prevCounters.dropped
+      ) {
+        const cacheHitsDelta = currCounters.cacheHits - prevCounters.cacheHits;
+        const totalCompletedDelta = currCounters.completed - prevCounters.completed;
+        const deliveredDelta = Math.max(0, totalCompletedDelta - cacheHitsDelta);
+        const droppedDelta = currCounters.dropped - prevCounters.dropped;
+        if (deliveredDelta > 0 || cacheHitsDelta > 0 || droppedDelta > 0) {
+          soundEngine.processEvents(
+            {
+              delivered: deliveredDelta,
+              cacheHits: cacheHitsDelta,
+              dropped: droppedDelta,
+            },
+            nowMs
+          );
+        }
+      }
+      prevCounters = currCounters;
 
       ctx.save();
       ctx.scale(dpr, dpr);
