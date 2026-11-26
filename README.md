@@ -12,16 +12,16 @@ Interactive 60fps system architecture and live traffic simulator built with Reac
 ## Development
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ## Verification & Production Build
 
 ```bash
-npm run lint
-npm test
-npm run build
+bun run lint
+bun run test
+bun run build
 ```
 
 Deploy the generated `dist/` folder to any static host (Vercel, Netlify, Cloudflare Pages, or GitHub Pages).
