@@ -75,6 +75,127 @@ export const NODE_META: Record<
   },
 };
 
+export interface NodeParamHelpEntry {
+  name: string;
+  impact: string;
+}
+
+export const NODE_PARAM_HELP: Record<
+  NodeType,
+  {
+    overview: string;
+    params: NodeParamHelpEntry[];
+  }
+> = {
+  ingress: {
+    overview:
+      'Emits synthetic HTTP request packets into connected downstream nodes at the rate set by the top Traffic Pattern and Intensity controls.',
+    params: [
+      {
+        name: 'Traffic Pattern & Intensity',
+        impact:
+          'Steady holds near target req/s; Viral Spike surges up to 3.6× in waves; Bot Flood fires repeated high-frequency bursts.',
+      },
+    ],
+  },
+  ratelimiter: {
+    overview:
+      'Token-bucket gatekeeper. Each allowed request consumes 1 token; when empty, excess requests immediately peel off as 429 drops to shield downstream services.',
+    params: [
+      {
+        name: 'Rate Limit (req/s)',
+        impact:
+          'Controls steady token refill speed. Setting it below downstream capacity protects databases from overload at the cost of 429 rejections.',
+      },
+      {
+        name: 'Burst Capacity (tokens)',
+        impact:
+          'Maximum tokens stored when idle. Larger bursts absorb brief spikes cleanly before 429 throttling kicks in.',
+      },
+    ],
+  },
+  loadbalancer: {
+    overview:
+      'Distributes incoming packets across online, non-overloaded downstream targets and fails fast with 503 only when every target is down or saturated.',
+    params: [
+      {
+        name: 'Balancing Strategy',
+        impact:
+          'Least Connections routes to the target with the lowest active + queued load ratio; Round Robin cycles evenly across healthy nodes.',
+      },
+    ],
+  },
+  cache: {
+    overview:
+      'In-memory edge store. Cache hits resolve immediately in ~4ms (returning cyan packets) without touching downstream compute or database pools.',
+    params: [
+      {
+        name: 'Cache Hit Rate (%)',
+        impact:
+          'Percentage of requests served directly from cache. Raising hit rate linearly cuts downstream RPS, queueing, and tail latency.',
+      },
+    ],
+  },
+  appserver: {
+    overview:
+      'Stateless worker pool. Requests execute concurrently up to Max Concurrency; excess arrivals wait in a bounded queue (amber) before overflowing as 503 drops.',
+    params: [
+      {
+        name: 'Max Concurrency (workers)',
+        impact:
+          'Peak throughput scales with Concurrency ÷ Processing Time. Too few workers triggers queueing even at moderate RPS.',
+      },
+      {
+        name: 'Processing Time (ms)',
+        impact:
+          'Time each worker holds a slot per request. Higher latency keeps workers busy longer, shrinking effective throughput.',
+      },
+      {
+        name: 'Queue Capacity (slots)',
+        impact:
+          'Buffer depth for waiting requests. Larger queues absorb brief bursts (raising p95 latency) instead of immediately dropping 503s.',
+      },
+    ],
+  },
+  queue: {
+    overview:
+      'Asynchronous shock absorber. Accepts burst arrivals into a deep buffer and drains downstream at a controlled steady pace.',
+    params: [
+      {
+        name: 'Drain Rate (req/s)',
+        impact:
+          'Steady emission rate to downstream consumers. Set at or below downstream capacity to eliminate cascading 503 failures.',
+      },
+      {
+        name: 'Buffer Capacity (msgs)',
+        impact:
+          'Maximum queued messages during prolonged spikes. Only drops 503 if inflow outpaces drain long enough to fill the entire buffer.',
+      },
+    ],
+  },
+  database: {
+    overview:
+      'Stateful connection-pooled storage. As active connections approach Pool Size, lock and I/O contention causes query latency to climb non-linearly.',
+    params: [
+      {
+        name: 'Connection Pool (conns)',
+        impact:
+          'Max simultaneous queries. Too small starves throughput; saturating the pool triggers exponential latency spikes and queue buildup.',
+      },
+      {
+        name: 'Base Query Latency (ms)',
+        impact:
+          'Uncontended query time. Multiplied up to ~4.2× under full pool saturation due to contention.',
+      },
+      {
+        name: 'Wait Queue Capacity (slots)',
+        impact:
+          'Requests waiting for a free DB connection. Prevents immediate 503s during short spikes at the expense of higher tail latency.',
+      },
+    ],
+  },
+};
+
 export function getDefaultConfig(type: NodeType): SimNodeConfig {
   switch (type) {
     case 'ingress':

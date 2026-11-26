@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  HelpCircle,
   Info,
   MousePointerClick,
   Power,
@@ -13,7 +14,7 @@ import {
   XOctagon,
 } from 'lucide-react';
 import { analyzeTopology } from '../lib/sim/diagnostics';
-import { NODE_META } from '../lib/sim/presets';
+import { NODE_META, NODE_PARAM_HELP } from '../lib/sim/presets';
 import {
   LoadBalancerStrategy,
   NodeUiSnapshot,
@@ -107,8 +108,88 @@ const Sparkline: React.FC<{ history: number[]; status: NodeUiSnapshot['status'] 
   );
 };
 
+interface HelpTooltipProps {
+  title: string;
+  content: React.ReactNode;
+  variant?: 'info' | 'help';
+  align?: 'left' | 'right';
+  placement?: 'top' | 'bottom';
+}
+
+const HelpTooltip: React.FC<HelpTooltipProps> = ({
+  title,
+  content,
+  variant = 'help',
+  align = 'left',
+  placement = 'bottom',
+}) => {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={`Help for ${title}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onFocus={() => setOpen(true)}
+        onBlur={(e) => {
+          if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+            setOpen(false);
+          }
+        }}
+        className="text-slate-500 hover:text-cyan-300 focus-visible:text-cyan-300 focus-visible:outline-none transition-colors p-0.5 rounded cursor-pointer"
+      >
+        {variant === 'info' ? (
+          <Info className="w-3.5 h-3.5" />
+        ) : (
+          <HelpCircle className="w-3.5 h-3.5" />
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="tooltip"
+          className={`absolute z-40 w-[264px] bg-[#090d16] border border-slate-700/90 rounded-lg p-3 shadow-xl text-left ${
+            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          } ${align === 'right' ? 'right-0' : 'left-0'}`}
+        >
+          <div className="text-[11px] font-semibold text-cyan-300 mb-1">{title}</div>
+          <div className="text-[11px] text-slate-300 leading-relaxed">{content}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SliderRowProps {
   label: string;
+  helpText?: string;
+  helpPlacement?: 'top' | 'bottom';
   value: number;
   min: number;
   max: number;
@@ -119,6 +200,8 @@ interface SliderRowProps {
 
 const SliderRow: React.FC<SliderRowProps> = ({
   label,
+  helpText,
+  helpPlacement = 'bottom',
   value,
   min,
   max,
@@ -127,9 +210,14 @@ const SliderRow: React.FC<SliderRowProps> = ({
   onChange,
 }) => (
   <div className="space-y-1.5">
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-slate-300 font-medium">{label}</span>
-      <span className="font-mono text-cyan-300 font-medium">
+    <div className="flex items-center justify-between text-xs gap-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-slate-300 font-medium truncate">{label}</span>
+        {helpText && (
+          <HelpTooltip title={label} content={helpText} align="left" placement={helpPlacement} />
+        )}
+      </div>
+      <span className="font-mono text-cyan-300 font-medium shrink-0">
         {value} {unit}
       </span>
     </div>
@@ -342,6 +430,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   }
 
   const meta = NODE_META[selectedNode.type];
+  const nodeHelp = NODE_PARAM_HELP[selectedNode.type];
   const utilPct = Math.min(100, Math.round(selectedNode.utilization * 100));
   const cfg = selectedNode.config;
 
@@ -350,7 +439,27 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
       {/* Node Header */}
       <div className="px-4 py-3.5 border-b border-slate-800/80 space-y-2.5">
         <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-400 font-medium">{meta.title}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">{meta.title}</span>
+            <HelpTooltip
+              variant="info"
+              align="left"
+              title={`${meta.title} Mechanics`}
+              content={
+                <div className="space-y-2">
+                  <p className="text-slate-300">{nodeHelp.overview}</p>
+                  <div className="pt-1.5 border-t border-slate-800 space-y-1.5">
+                    {nodeHelp.params.map((p) => (
+                      <div key={p.name}>
+                        <div className="font-medium text-slate-100">{p.name}</div>
+                        <div className="text-slate-400">{p.impact}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              }
+            />
+          </div>
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-1 font-medium ${
@@ -477,7 +586,24 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
         {/* Tunable Live Parameters */}
         <div className="space-y-4">
-          <h3 className="text-xs font-semibold text-slate-200">Live Parameters</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-slate-200">Live Parameters</h3>
+            <HelpTooltip
+              variant="info"
+              align="right"
+              title={`${meta.title} Parameters`}
+              content={
+                <div className="space-y-1.5">
+                  {nodeHelp.params.map((p) => (
+                    <div key={p.name}>
+                      <div className="font-medium text-slate-100">{p.name}</div>
+                      <div className="text-slate-400">{p.impact}</div>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+          </div>
 
           {selectedNode.type === 'ingress' && (
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -490,6 +616,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <>
               <SliderRow
                 label="Rate Limit"
+                helpText={nodeHelp.params[0].impact}
                 value={cfg.rateLimitRps ?? 180}
                 min={20}
                 max={450}
@@ -499,6 +626,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Burst Capacity"
+                helpText={nodeHelp.params[1].impact}
                 value={cfg.burstCapacity ?? 60}
                 min={5}
                 max={300}
@@ -511,7 +639,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
           {selectedNode.type === 'loadbalancer' && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-slate-300">Balancing Strategy</div>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
+                <span>Balancing Strategy</span>
+                <HelpTooltip
+                  title="Balancing Strategy"
+                  content={nodeHelp.params[0].impact}
+                  align="left"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-1 p-1 bg-[#090d16] border border-slate-800 rounded-lg">
                 {(
                   [
@@ -539,6 +674,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           {selectedNode.type === 'cache' && (
             <SliderRow
               label="Cache Hit Rate"
+              helpText={nodeHelp.params[0].impact}
               value={cfg.cacheHitRate ?? 60}
               min={0}
               max={98}
@@ -552,6 +688,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <>
               <SliderRow
                 label="Max Concurrency"
+                helpText={nodeHelp.params[0].impact}
                 value={cfg.maxConcurrency ?? 12}
                 min={2}
                 max={64}
@@ -561,6 +698,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Processing Time"
+                helpText={nodeHelp.params[1].impact}
                 value={cfg.processingTimeMs ?? 90}
                 min={15}
                 max={350}
@@ -570,6 +708,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Queue Capacity"
+                helpText={nodeHelp.params[2].impact}
                 value={cfg.queueCapacity ?? 24}
                 min={0}
                 max={150}
@@ -584,6 +723,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <>
               <SliderRow
                 label="Drain Rate"
+                helpText={nodeHelp.params[0].impact}
                 value={cfg.drainRateRps ?? 120}
                 min={10}
                 max={400}
@@ -593,6 +733,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Buffer Capacity"
+                helpText={nodeHelp.params[1].impact}
                 value={cfg.queueCapacity ?? 400}
                 min={50}
                 max={1200}
@@ -607,6 +748,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
             <>
               <SliderRow
                 label="Connection Pool"
+                helpText={nodeHelp.params[0].impact}
                 value={cfg.poolSize ?? 16}
                 min={2}
                 max={64}
@@ -616,6 +758,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Base Query Latency"
+                helpText={nodeHelp.params[1].impact}
                 value={cfg.baseLatencyMs ?? 45}
                 min={10}
                 max={250}
@@ -625,6 +768,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
               <SliderRow
                 label="Wait Queue Capacity"
+                helpText={nodeHelp.params[2].impact}
                 value={cfg.queueCapacity ?? 24}
                 min={0}
                 max={120}
@@ -668,6 +812,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           {selectedNode.type !== 'ingress' && (
             <SliderRow
               label="Injected Latency Fault"
+              helpPlacement="top"
+              helpText="Adds artificial network or processing delay to every request passing through this node, compounding downstream queue pressure."
               value={cfg.injectedLatencyMs ?? 0}
               min={0}
               max={400}
